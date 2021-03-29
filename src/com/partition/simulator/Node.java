@@ -5,7 +5,7 @@ import java.util.List;
 
 public class Node {
     private int identifier;
-    private List<Character> ownedData;
+    private List<String> ownedData;
     private PartitionResolver resolver;
 
     public Node successor;
@@ -17,7 +17,7 @@ public class Node {
         this.resolver = resolver;
     }
 
-    public boolean addData(char id) {
+    public boolean addData(String id) {
         if (!ownsId(id)) {
             throw new IllegalArgumentException("Can't add id that this node doesn't resolve");
         }
@@ -38,13 +38,14 @@ public class Node {
 
     public void setPredecessor(Node pred) {
         this.predecessor = pred;
+        resolver.setPredecessor(pred);
     }
 
     public int getId() {
         return this.identifier;
     }
 
-    public boolean ownsId(char id) {
+    public boolean ownsId(String id) {
         return this.resolver.resolves(id);
     }
 

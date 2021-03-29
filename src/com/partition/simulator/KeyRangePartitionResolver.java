@@ -1,5 +1,7 @@
 package com.partition.simulator;
 
+import java.io.NotActiveException;
+
 public class KeyRangePartitionResolver implements PartitionResolver {
     private char rangeMin;
     private char rangeMax;
@@ -20,15 +22,21 @@ public class KeyRangePartitionResolver implements PartitionResolver {
     }
 
     @Override
-    public boolean resolves(char id) {
+    public boolean resolves(String id) {
+        char c = id.charAt(0);
         if (
-                id < 'a' ||
-                id > 'z'
+                c < 'a' ||
+                c > 'z'
         ) {
-            throw new IllegalArgumentException("Invalid volume id: " + id);
+            throw new IllegalArgumentException("Invalid id: " + id);
         }
 
-        return rangeMin <= id && id <= rangeMax;
+        return rangeMin <= c && c <= rangeMax;
+    }
+
+    @Override
+    public void setPredecessor(Node node) {
+        return;
     }
 
 

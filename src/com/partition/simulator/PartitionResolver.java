@@ -1,5 +1,6 @@
 package com.partition.simulator;
 
 public interface PartitionResolver {
-    public boolean resolves(char id);
+    boolean resolves(String id);
+    void setPredecessor(Node node);
 }

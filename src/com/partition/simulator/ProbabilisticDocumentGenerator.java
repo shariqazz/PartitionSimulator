@@ -2,6 +2,7 @@ package com.partition.simulator;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 public class ProbabilisticDocumentGenerator {
     private Map<Integer, Double> probMap;
@@ -21,7 +22,7 @@ public class ProbabilisticDocumentGenerator {
         probSum += prob;
     }
 
-    public char getNext() {
+    public String getNext() {
         if ( (1.0 - probSum) > 0.01 ) {
             throw new IllegalArgumentException("Invalid setup. Prob sum needs to be 1.0. Error wider than 0.01. Was: " + probSum);
         }
@@ -30,10 +31,12 @@ public class ProbabilisticDocumentGenerator {
         double tempProb = 0.0;
         for (Integer i : probMap.keySet()) {
             tempProb += probMap.get(i);
-            if (random <= tempProb)
-                return (char) (i + 'a');
+            if (random <= tempProb) {
+                char prefix = (char) (i + 'a');
+                return String.valueOf(prefix) + UUID.randomUUID().toString();
+            }
         }
         // error
-        return Character.MIN_VALUE;
+        return "";
     }
 }

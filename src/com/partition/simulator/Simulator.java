@@ -1,8 +1,8 @@
 package com.partition.simulator;
 
 import java.security.NoSuchAlgorithmException;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
+
 import javafx.application.Application;
 import javafx.scene.Scene;
 import javafx.scene.chart.BarChart;
@@ -14,9 +14,15 @@ import javafx.stage.Stage;
 
 import static com.partition.simulator.Utils.md5_32;
 
+// TODO: range based hash partitioning
 public class Simulator extends Application {
-	private static List<Node> nodes;
-	private static int NUM_DOCS = 10000;
+	private static List<Node> equalRangeNodes = new ArrayList<>();
+	private static List<Node> skewedRangeNodes = new ArrayList<>();
+	private static List<Node> equalHashNodes = new ArrayList<>();
+	private static List<Node> skewedHashNodes = new ArrayList<>();
+	private static int NUM_DOCS = 1000000;
+	private static int NUM_NODES = 25;
+	private static int CHAR_STEPS = 0;
 
 	@Override
 	public void start(Stage stage) throws Exception {
@@ -32,14 +38,37 @@ public class Simulator extends Application {
 
 		BarChart barChart = new BarChart(xAxis, yAxis);
 
-		XYChart.Series dataSeries1 = new XYChart.Series();
-		dataSeries1.setName("Number of Docs");
+		XYChart.Series equalRangeSeries = new XYChart.Series();
+		equalRangeSeries.setName("Equal prob range partitioning");
+		XYChart.Series skewedRangeSeries = new XYChart.Series();
+		skewedRangeSeries.setName("Skewed prob range partitioning");
+		XYChart.Series equalHashSeries = new XYChart.Series();
+		equalHashSeries.setName("Equal prob hash partitioning");
+		XYChart.Series skewedHashSeries = new XYChart.Series();
+		skewedHashSeries.setName("Skewed prob hash partitioning");
 
-		for (Node n : nodes) {
-			dataSeries1.getData().add(new XYChart.Data(String.valueOf(n.getId()), n.getSize()));
+		for (Node n : equalRangeNodes) {
+			equalRangeSeries.getData().add(new XYChart.Data(String.valueOf(n.getId()), n.getSize()));
 		}
 
-		barChart.getData().add(dataSeries1);
+		for (Node n : skewedRangeNodes) {
+			skewedRangeSeries.getData().add(new XYChart.Data(String.valueOf(n.getId()), n.getSize()));
+		}
+
+		int i = 0;
+		for (Node n : equalHashNodes) {
+			equalHashSeries.getData().add(new XYChart.Data(String.valueOf(i++), n.getSize()));
+		}
+
+		i = 0;
+		for (Node n : skewedHashNodes) {
+			skewedHashSeries.getData().add(new XYChart.Data(String.valueOf(i++), n.getSize()));
+		}
+
+		barChart.getData().add(equalRangeSeries);
+		barChart.getData().add(skewedRangeSeries);
+		barChart.getData().add(equalHashSeries);
+		barChart.getData().add(skewedHashSeries);
 
 		VBox vbox = new VBox(barChart);
 
@@ -53,10 +82,11 @@ public class Simulator extends Application {
 	}
 
 	public static void main(String[] args) throws Exception {
-//        equalProbabilityRangeBasedSimulation();
-//        skewedProbabilityRangeBasedSimulation();
-//        equalProbabilityHashBasedSimulation();
-//        skewedProbabilityHashBasedSimulation();
+        equalProbabilityRangeBasedSimulation();
+        skewedProbabilityRangeBasedSimulation();
+        skewedProbabilityHashBasedSimulation();
+		equalProbabilityHashBasedSimulation();
+        Application.launch();
     }
 
 	private static void skewedProbabilityHashBasedSimulation() throws NoSuchAlgorithmException {
@@ -91,34 +121,53 @@ public class Simulator extends Application {
 
 		// generate sample input data
 		int numDocs = NUM_DOCS;
-		List<Character> docs = new ArrayList<>(numDocs);
+		List<String> docs = new ArrayList<>(numDocs);
 		for (int i = 0; i < numDocs; i++) {
 			docs.add(docGen.getNext());
 		}
 
 		// generate range-based nodes that will store this data
-		int numNodes = 12;
-		nodes = new ArrayList<>(numNodes);
-		Node prevNode = null;
+		int numNodes = NUM_NODES;
+		TreeMap<Integer, Node> nodeMap = new TreeMap<>();
+		List<Node> nodes = skewedHashNodes;
 		for (int i = 0; i <= numNodes; i++) {
-			System.out.println(String.format("%d . Initializing hash based node with previous node id %d", i, prevNode == null ? -1 : prevNode.getId()));
-			int nodeId = md5_32(String.valueOf(i));
-			Node newNode = new Node(nodeId, new SimpleHashPartitionResolver(nodeId, prevNode));
-			nodes.add(newNode);
-			prevNode = newNode;
+			int nodeId = md5_32(String.valueOf(UUID.randomUUID()));
+			Node newNode = new Node(nodeId, new SimpleHashPartitionResolver(nodeId));
+			nodeMap.put(nodeId, newNode);
 		}
 
-		// assign data to nodes
-		for (char c : docs) {
+		Node prevNode = nodeMap.get(nodeMap.lastKey());
+		for (Integer id : nodeMap.keySet()) {
+			System.out.println(String.format("Initializing hash based node with previous node id %d", prevNode == null ? -1 : prevNode.getId()));
+			nodeMap.get(id).setPredecessor(prevNode);
+			prevNode = nodeMap.get(id);
+			nodes.add(prevNode);
+		}
+
+		for (Node n : nodes) {
+			System.out.println("Node id: " + n.getId());
+		}
+
+		int docsAddedCount = 0;
+		for (String c : docs) {
+			boolean added = false;
 			for (Node n : nodes) {
 				if (n.ownsId(c)) {
 //					System.out.println(String.format("%d owns %c", n.getId(), c));
 					n.addData(c);
+					docsAddedCount++;
+					added = true;
 				}
+			}
+
+			if (!added) {
+				System.out.println("Not added: " + md5_32(c));
 			}
 		}
 
-		Application.launch();
+		System.out.println("Skewed prob hash docs added count: " + docsAddedCount);
+
+//		Application.launch();
 	}
 
     private static void equalProbabilityHashBasedSimulation() throws NoSuchAlgorithmException {
@@ -131,34 +180,43 @@ public class Simulator extends Application {
 
 		// generate sample input data
 		int numDocs = NUM_DOCS;
-		List<Character> docs = new ArrayList<>(numDocs);
+		List<String> docs = new ArrayList<>(numDocs);
 		for (int i = 0; i < numDocs; i++) {
 			docs.add(docGen.getNext());
 		}
 
 		// generate range-based nodes that will store this data
-		int numNodes = 12;
-		nodes = new ArrayList<>(numNodes);
-		Node prevNode = null;
+		int numNodes = NUM_NODES;
+		TreeMap<Integer, Node> nodeMap = new TreeMap<>();
+		List<Node> nodes = equalHashNodes;
 		for (int i = 0; i <= numNodes; i++) {
-			System.out.println(String.format("%d . Initializing hash based node with previous node id %d", i, prevNode == null ? -1 : prevNode.getId()));
-			int nodeId = md5_32(String.valueOf(i));
-			Node newNode = new Node(nodeId, new SimpleHashPartitionResolver(nodeId, prevNode));
-			nodes.add(newNode);
-			prevNode = newNode;
+			int nodeId = md5_32(String.valueOf(UUID.randomUUID()));
+			Node newNode = new Node(nodeId, new SimpleHashPartitionResolver(nodeId));
+			nodeMap.put(nodeId, newNode);
+		}
+
+		Node prevNode = nodeMap.get(nodeMap.lastKey());
+		for (Integer id : nodeMap.keySet()) {
+			System.out.println(String.format("Initializing hash based node with previous node id %d", prevNode == null ? -1 : prevNode.getId()));
+			nodeMap.get(id).setPredecessor(prevNode);
+			prevNode = nodeMap.get(id);
+			nodes.add(prevNode);
 		}
 
 		// assign data to nodes
-		for (char c : docs) {
+		int docsAddedCount = 0;
+		for (String c : docs) {
 			for (Node n : nodes) {
 				if (n.ownsId(c)) {
 //					System.out.println(String.format("%d owns %c", n.getId(), c));
 					n.addData(c);
+					docsAddedCount++;
 				}
 			}
 		}
+		System.out.println("Equal prob hash docs added count: " + docsAddedCount);
 
-		Application.launch();
+//		Application.launch();
 	}
 
     private static void equalProbabilityRangeBasedSimulation() {
@@ -171,40 +229,49 @@ public class Simulator extends Application {
 
 		// generate sample input data
 		int numDocs = NUM_DOCS;
-		List<Character> docs = new ArrayList<>(numDocs);
+		List<String> docs = new ArrayList<>(numDocs);
 		for (int i = 0; i < numDocs; i++) {
 			docs.add(docGen.getNext());
 		}
 
 		// generate range-based nodes that will store this data
-		int numNodes = 12;
-		nodes = new ArrayList<>(numNodes);
+		int numNodes = NUM_NODES;
+		List<Node> nodes = equalRangeNodes;
 		int cur = 0;
 		for (int i = 0; i <= numNodes; i++) {
 			char rangeStart = (char) (cur + 'a');
-			char rangeEnd = (char) (Math.min(rangeStart + 1, 'z'));
+			char rangeEnd = (char) (Math.min(rangeStart + CHAR_STEPS, 'z'));
 			System.out.println(String.format("%d . Initializing node to handle range %c - %c", i, rangeStart, rangeEnd));
 			nodes.add(
 					new Node(i, new KeyRangePartitionResolver(rangeStart, rangeEnd))
 			);
-			cur += 2;
+			cur += (1 + CHAR_STEPS);
 		}
 
 		// assign data to nodes
-		for (char c : docs) {
+		int docsAddedCount = 0;
+		for (String c : docs) {
 			for (Node n : nodes) {
 				if (n.ownsId(c)) {
 					n.addData(c);
+					docsAddedCount++;
 				}
 			}
 		}
 
-		Application.launch();
+		System.out.println("Equal prob range docs added count: " + docsAddedCount);
+
+//		Application.launch();
 	}
 
 	private static void skewedProbabilityRangeBasedSimulation() {
 		// set up document generator
 		ProbabilisticDocumentGenerator docGen = new ProbabilisticDocumentGenerator();
+
+//		docGen.add('a', 0.70);
+//		docGen.add('b', 0.10);
+//		docGen.add('c', 0.10);
+//		docGen.add('d', 0.10);
 
 		docGen.add('a', 0.017);
 		docGen.add('b', 0.044);
@@ -235,36 +302,38 @@ public class Simulator extends Application {
 
 		// generate sample input data
 		int numDocs = NUM_DOCS;
-		List<Character> docs = new ArrayList<>(numDocs);
+		List<String> docs = new ArrayList<>(numDocs);
 		for (int i = 0; i < numDocs; i++) {
 			docs.add(docGen.getNext());
 		}
 
 		// generate range-based nodes that will store this data
-		int numNodes = 12;
-		nodes = new ArrayList<>(numNodes);
+		int numNodes = NUM_NODES;
+		List<Node> nodes = skewedRangeNodes;
 		int cur = 0;
 		for (int i = 0; i <= numNodes; i++) {
 			char rangeStart = (char) (cur + 'a');
-			char rangeEnd = (char) (Math.min(rangeStart + 1, 'z'));
+			char rangeEnd = (char) (Math.min(rangeStart + CHAR_STEPS, 'z'));
 			System.out.println(String.format("%d . Initializing node to handle range %c - %c", i, rangeStart, rangeEnd));
 			nodes.add(
 					new Node(i, new KeyRangePartitionResolver(rangeStart, rangeEnd))
 			);
-			cur += 2;
+			cur += (1 + CHAR_STEPS);
 		}
 
 		// assign data to nodes
-		for (char c : docs) {
+		int docsAddedCount = 0;
+		for (String c : docs) {
 			for (Node n : nodes) {
 				if (n.ownsId(c)) {
 					n.addData(c);
+					docsAddedCount++;
 				}
 			}
 		}
 
-		System.out.println(nodes.toString());
+		System.out.println("Skewed prob range docs added count: " + docsAddedCount);
 
-		Application.launch();
+//		Application.launch();
 	}
 }
